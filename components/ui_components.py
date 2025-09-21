@@ -2,11 +2,15 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime, timedelta
 
+# Apply global seaborn style
+sns.set_theme(style="whitegrid")
+
 def render_styling():
-    """Injects custom CSS for a more dynamic and "fancy" UI, including animations."""
+    """Injects custom CSS for a more dynamic and 'fancy' UI, including animations."""
     st.markdown("""
     <style>
         @keyframes slideInFade {
@@ -66,6 +70,7 @@ def render_sidebar_filters(df):
 
     return selected_platforms, selected_violations, selected_date_range
 
+
 def render_header_and_kpis(df):
     """Displays the main title and the top-level KPI metrics based on filtered data."""
     st.markdown('<p class="main-title">Automated Compliance Dashboard</p>', unsafe_allow_html=True)
@@ -78,7 +83,8 @@ def render_header_and_kpis(df):
     kpi1.metric(label="Overall Compliance", value=f"{overall_compliance_rate:.1f}%")
     kpi2.metric(label="Active Violations in View", value=f"{active_violations}")
     kpi3.metric(label="Platforms in View", value=f"{platforms_monitored}")
-    
+
+
 def render_charts(df, df_violations):
     """Renders the data visualization charts based on filtered data."""
     st.markdown('<p class="section-header">Compliance Analytics</p>', unsafe_allow_html=True)
@@ -89,24 +95,36 @@ def render_charts(df, df_violations):
             compliance_by_platform = df.groupby('platform')['is_compliant'].mean().reset_index()
             compliance_by_platform['compliance_rate'] = compliance_by_platform['is_compliant'] * 100
             
-            fig_bar = px.bar(
-                compliance_by_platform, x='compliance_rate', y='platform', orientation='h',
-                title='Compliance Rate by Platform',
-                color='compliance_rate', color_continuous_scale='RdYlGn', range_color=[0, 100],
-                template="plotly_white"
+            fig, ax = plt.subplots(figsize=(6, 4))
+            sns.barplot(
+                data=compliance_by_platform,
+                x="compliance_rate", y="platform",
+                palette="RdYlGn", ax=ax
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            ax.set_title("Compliance Rate by Platform")
+            ax.set_xlabel("Compliance Rate (%)")
+            ax.set_ylabel("Platform")
+            ax.set_xlim(0, 100)
+            st.pyplot(fig)
     
     with col2:
         if not df_violations.empty:
             violation_counts = df_violations['violation_type'].value_counts().reset_index()
-            fig_donut = px.pie(
-                violation_counts, names='violation_type', values='count',
-                title='Violations Breakdown', hole=0.5,
-                color_discrete_sequence=px.colors.sequential.Blues_r,
-                template="plotly_white"
+            violation_counts.columns = ['violation_type', 'count']
+
+            fig, ax = plt.subplots(figsize=(5, 5))
+            wedges, texts, autotexts = ax.pie(
+                violation_counts['count'],
+                labels=violation_counts['violation_type'],
+                autopct='%1.1f%%',
+                startangle=90
             )
-            st.plotly_chart(fig_donut, use_container_width=True)
+            # Donut effect
+            centre_circle = plt.Circle((0, 0), 0.70, fc='white')
+            fig.gca().add_artist(centre_circle)
+            ax.set_title("Violations Breakdown")
+            st.pyplot(fig)
+
 
 def render_historical_trend(df_violations):
     """Renders a line chart showing the trend of violations over time."""
@@ -114,14 +132,19 @@ def render_historical_trend(df_violations):
     if not df_violations.empty:
         df_violations['date'] = df_violations['timestamp'].dt.date
         violations_over_time = df_violations.groupby('date').size().reset_index(name='count')
-        
-        fig_line = px.line(
-            violations_over_time, x='date', y='count',
-            title='Daily Violation Count', labels={'date': 'Date', 'count': 'Number of Violations'},
-            template="plotly_white"
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.plot(
+            violations_over_time['date'],
+            violations_over_time['count'],
+            marker="o", color="#1E2A78"
         )
-        fig_line.update_traces(mode='lines+markers', line_color='#1E2A78')
-        st.plotly_chart(fig_line, use_container_width=True)
+        ax.set_title("Daily Violation Count")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Number of Violations")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
 
 def render_violations_feed(df_violations):
     """Renders the real-time feed and data export button."""
@@ -141,9 +164,7 @@ def render_violations_feed(df_violations):
 
     for index, row in df_violations.head(10).iterrows():
         with st.expander(f"🔴 **{row['violation_type']}** on **{row['platform']}**"):
-            # Details for each violation
             st.write(f"**Product:** {row['product_name']}")
             st.write(f"**Brand:** {row['brand']}")
             st.write(f"**Severity:** `{row['severity']}`")
-            # ... and so on
             st.write(f"**Date Detected:** {row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
